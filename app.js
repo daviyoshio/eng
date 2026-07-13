@@ -476,6 +476,23 @@
           <small>${stats.percent}%</small>
         </button>`;
     }).join("");
+
+    if (window.matchMedia("(max-width: 780px)").matches) {
+      requestAnimationFrame(() => {
+        const currentNode = elements.phaseRoute.querySelector(".is-current");
+        if (!currentNode) return;
+
+        const viewportStart = elements.phaseRoute.scrollLeft;
+        const viewportEnd = viewportStart + elements.phaseRoute.clientWidth;
+        const nodeStart = currentNode.offsetLeft;
+        const nodeEnd = nodeStart + currentNode.offsetWidth;
+
+        if (nodeStart < viewportStart || nodeEnd > viewportEnd) {
+          const centeredPosition = nodeStart - (elements.phaseRoute.clientWidth - currentNode.offsetWidth) / 2;
+          elements.phaseRoute.scrollTo({ left: Math.max(0, centeredPosition), behavior: "smooth" });
+        }
+      });
+    }
   }
 
   function renderRoadmap() {

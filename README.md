@@ -31,4 +31,3 @@ O progresso fica vinculado ao navegador e ao endereço publicado. Limpar os dado
 - Traduções derivadas do dicionário English–Portuguese do projeto FreeDict, distribuído sob GPL v2 ou posterior, com ajustes pontuais para português brasileiro contemporâneo.
 
 Os arquivos de atribuição e licença estão em `NOTICE.md` e na pasta `licenses`.
-# eng

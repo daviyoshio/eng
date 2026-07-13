@@ -27,12 +27,14 @@
 html {
   min-width: 320px;
   min-height: 100%;
+  overflow-x: hidden;
   background: var(--bg-deep);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
+  overflow-x: hidden;
   color: var(--text);
   font-family: var(--font);
   background:
@@ -104,6 +106,15 @@ label[for]:focus-visible {
   border-bottom: 1px solid rgba(167, 126, 240, 0.18);
   background: rgba(11, 5, 35, 0.88);
   backdrop-filter: blur(20px);
+}
+
+.topbar > *,
+.phase-route-panel > *,
+.section-heading > *,
+.phase-card > *,
+.panel,
+.word-panel {
+  min-width: 0;
 }
 
 .brand {
@@ -257,7 +268,7 @@ label[for]:focus-visible {
 
 .phase-route-panel {
   display: grid;
-  grid-template-columns: minmax(230px, 0.72fr) minmax(640px, 2.7fr);
+  grid-template-columns: minmax(230px, 0.72fr) minmax(0, 2.7fr);
   align-items: center;
   gap: 26px;
 }
@@ -308,9 +319,16 @@ label[for]:focus-visible {
 .phase-route {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
+  grid-template-columns: repeat(10, minmax(52px, 1fr));
   gap: 8px;
-  min-width: 640px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scroll-snap-type: inline proximity;
+  -webkit-overflow-scrolling: touch;
 }
 
 .phase-route::before {
@@ -336,6 +354,7 @@ label[for]:focus-visible {
   font-weight: 800;
   background: transparent;
   cursor: pointer;
+  scroll-snap-align: center;
 }
 
 .phase-node > span:first-child {
@@ -551,6 +570,7 @@ label[for]:focus-visible {
   line-height: 1.14;
   letter-spacing: -0.045em;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .quiz-card h2 em {
@@ -562,6 +582,7 @@ label[for]:focus-visible {
   margin: -7px 0 18px;
   color: var(--muted);
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .answer-row {
@@ -584,6 +605,7 @@ dialog input {
 }
 
 .answer-row input {
+  min-width: 0;
   width: 100%;
   padding: 0 20px;
   font-size: 1.05rem;
@@ -1030,7 +1052,9 @@ dialog input {
 }
 
 .word-table-wrap {
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .word-table {
@@ -1244,7 +1268,6 @@ dialog input {
   .route-summary > p:last-child { margin: 0; }
 
   .phase-route {
-    overflow-x: auto;
     padding-bottom: 8px;
   }
 
@@ -1254,10 +1277,16 @@ dialog input {
 }
 
 @media (max-width: 780px) {
+  body {
+    background-attachment: scroll;
+  }
+
   .topbar {
     position: static;
     grid-template-columns: 1fr;
+    width: 100%;
     padding: 14px 16px 0;
+    overflow: hidden;
   }
 
   .brand {
@@ -1266,19 +1295,31 @@ dialog input {
 
   .header-stats {
     justify-content: center;
+    width: 100%;
     margin-top: 12px;
   }
 
   .main-nav {
     order: 4;
     grid-column: auto;
-    width: calc(100% + 32px);
+    justify-content: flex-start;
+    width: 100vw;
+    max-width: none;
     margin: 12px -16px 0;
+    padding: 0 8px;
     overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .main-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-item {
-    flex: 1 0 auto;
+    flex: 0 0 auto;
+    min-width: max-content;
+    min-height: 50px;
     padding: 0 12px;
     font-size: 0.78rem;
   }
@@ -1293,6 +1334,15 @@ dialog input {
   }
 
   .learn-layout { padding-top: 18px; }
+
+  .phase-route {
+    grid-template-columns: repeat(10, 56px);
+    padding: 5px 2px 12px;
+  }
+
+  .phase-route::before {
+    display: none;
+  }
 
   .route-summary {
     display: block;
@@ -1328,6 +1378,10 @@ dialog input {
     grid-template-columns: 1fr;
   }
 
+  .answer-row .primary-button {
+    width: 100%;
+  }
+
   .quiz-footer {
     grid-template-columns: 1fr;
     margin: 0 -18px;
@@ -1337,6 +1391,17 @@ dialog input {
 
   .phase-grid {
     grid-template-columns: 1fr;
+  }
+
+  .phase-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .phase-card .secondary-button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .section-heading,
@@ -1359,7 +1424,12 @@ dialog input {
   }
 
   .backup-actions {
+    width: 100%;
     justify-content: flex-start;
+  }
+
+  .backup-actions > * {
+    flex: 1 1 160px;
   }
 
   .word-filters {
@@ -1377,9 +1447,22 @@ dialog input {
   .word-table td:nth-child(4) {
     display: none;
   }
+
+  .word-table {
+    min-width: 520px;
+  }
 }
 
 @media (max-width: 480px) {
+  .topbar {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .brand {
+    gap: 10px;
+    font-size: 1.05rem;
+  }
+
   .brand-mark {
     width: 38px;
     height: 38px;
@@ -1394,7 +1477,24 @@ dialog input {
 
   .mini-stat > span:first-child { display: none; }
 
+  .mini-stat small {
+    font-size: 0.56rem;
+    letter-spacing: 0.05em;
+  }
+
+  .nav-item {
+    padding: 0 10px;
+  }
+
   .phase-route-panel { gap: 14px; }
+
+  .phase-route {
+    grid-template-columns: repeat(10, 54px);
+  }
+
+  .route-summary h1 {
+    font-size: 1.65rem;
+  }
 
   .daily-strip {
     grid-template-columns: 1fr;
@@ -1406,6 +1506,55 @@ dialog input {
 
   .daily-progress {
     grid-column: auto;
+  }
+
+  .quiz-card {
+    padding: 18px 14px 0;
+  }
+
+  .quiz-topline {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .mode-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mode-button {
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 0.7rem;
+  }
+
+  .question-counter {
+    align-self: flex-end;
+  }
+
+  .quiz-symbol {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 18px;
+    font-size: 1.9rem;
+  }
+
+  .quiz-card h2 {
+    font-size: clamp(1.55rem, 9vw, 2.2rem);
+  }
+
+  .answer-row input {
+    min-height: 54px;
+    padding: 0 15px;
+  }
+
+  .quiz-footer {
+    margin-right: -14px;
+    margin-left: -14px;
+    padding-right: 16px;
+    padding-left: 16px;
   }
 
   .quiz-actions {
@@ -1420,6 +1569,47 @@ dialog input {
 
   .weekly-chart { gap: 7px; }
 
+  .content-view {
+    padding: 30px 0 48px;
+  }
+
+  .section-heading {
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  .section-heading h1 {
+    font-size: 2rem;
+  }
+
+  .panel,
+  .stat-card {
+    padding: 18px;
+  }
+
+  .phase-card {
+    padding: 16px;
+  }
+
+  .phase-card-number {
+    width: 46px;
+    height: 46px;
+  }
+
+  .backup-actions > * {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .word-table {
+    min-width: 430px;
+  }
+
+  .word-table th:nth-child(5),
+  .word-table td:nth-child(5) {
+    display: none;
+  }
+
   .pagination {
     align-items: stretch;
     flex-direction: column;
@@ -1427,6 +1617,22 @@ dialog input {
 
   .pagination > div {
     justify-content: space-between;
+  }
+
+  dialog form {
+    padding: 24px 20px;
+  }
+
+  .dialog-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .toast {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: 12px;
+    max-width: none;
   }
 }
 
