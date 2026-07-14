@@ -78,10 +78,14 @@
               <div class="quiz-topline">
                 <div class="mode-switch" role="group" aria-label="Modo de estudo">
                   <button class="mode-button is-active" type="button" data-mode="new">Palavras novas</button>
-                  <button class="mode-button" type="button" data-mode="review">Revisar erros <span id="review-count">0</span></button>
+                  <button class="mode-button" type="button" data-mode="review">Precisam de atenção <span id="review-count">0</span></button>
                 </div>
                 <span class="question-counter"><span id="session-current">1</span>/<span id="session-total">20</span></span>
               </div>
+
+              <p class="review-tip" id="review-tip" hidden>
+                <strong>Fila de atenção:</strong> acerte sem usar dica para a palavra sair daqui. Se errar novamente, ela continua na fila.
+              </p>
 
               <div class="quiz-symbol" aria-hidden="true">▱</div>
               <p class="eyebrow centered" id="question-label">Traduza para o inglês</p>
@@ -109,6 +113,7 @@
               <div class="quiz-actions">
                 <button class="hint-button" id="hint-button" type="button">◌ Mostrar dica</button>
                 <button class="sound-button" id="sound-button" type="button" hidden>◖ Ouvir pronúncia</button>
+                <button class="primary-button compact" id="empty-review-button" type="button" hidden>Voltar às palavras novas</button>
               </div>
 
               <div class="answer-feedback" id="answer-feedback" role="status" aria-live="polite"></div>
@@ -208,6 +213,8 @@
                 <select id="status-filter">
                   <option value="all">Todos os status</option>
                   <option value="new">Não estudadas</option>
+                  <option value="attention">Precisam treinar</option>
+                  <option value="relearned">Reaprendidas</option>
                   <option value="learning">Em aprendizado</option>
                   <option value="mastered">Dominadas</option>
                 </select>
@@ -215,7 +222,7 @@
             </div>
             <div class="word-table-wrap">
               <table class="word-table">
-                <thead><tr><th>#</th><th>Inglês</th><th>Português</th><th>Fase</th><th>Status</th><th><span class="sr-only">Ouvir</span></th></tr></thead>
+                <thead><tr><th>#</th><th>Inglês</th><th>Português</th><th>Fase</th><th>Status</th><th>Ações</th></tr></thead>
                 <tbody id="word-table-body"></tbody>
               </table>
             </div>

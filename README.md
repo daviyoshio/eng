@@ -16,7 +16,9 @@ Não é necessário instalar dependências nem executar comandos. O arquivo inic
 
 - 10 fases com 300 palavras cada;
 - treino de português para inglês;
-- fila de revisão para palavras erradas ou pendentes;
+- fila de atenção com tag para palavras erradas;
+- remoção automática da fila quando a palavra é reaprendida sem dica;
+- opção de marcar ou retirar qualquer palavra da fila manualmente;
 - pronúncia com a voz do próprio navegador;
 - meta diária ajustável, inicialmente configurada para 215 palavras;
 - progresso, sequência e XP salvos em `localStorage`;

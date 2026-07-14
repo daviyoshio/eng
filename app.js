@@ -47,6 +47,9 @@
     answerButton: $("#answer-button"),
     hintButton: $("#hint-button"),
     soundButton: $("#sound-button"),
+    emptyReviewButton: $("#empty-review-button"),
+    reviewTip: $("#review-tip"),
+    quizCard: $(".quiz-card"),
     feedback: $("#answer-feedback"),
     phaseProgressFill: $("#phase-progress-fill"),
     phaseProgressLabel: $("#phase-progress-label"),
@@ -92,6 +95,44 @@
     };
   }
 
+  function defaultWordProgress() {
+    return {
+      seen: 0,
+      correct: 0,
+      wrong: 0,
+      streak: 0,
+      mastered: false,
+      nextReview: 0,
+      lastSeen: null,
+      lastResult: null,
+      needsAttention: false,
+      attentionReason: null,
+      attentionSince: null,
+      relearnedAt: null,
+    };
+  }
+
+  function normalizeProgress(progress = {}) {
+    const normalized = { ...defaultWordProgress(), ...progress };
+    const hasAttentionFlag = typeof progress.needsAttention === "boolean";
+
+    // Backups e dados já salvos não tinham a fila de atenção. Palavras com
+    // erro pendente são migradas automaticamente, sem apagar o histórico.
+    if (!hasAttentionFlag && normalized.wrong > 0 && !normalized.mastered) {
+      normalized.needsAttention = true;
+      normalized.attentionReason = "mistake";
+      normalized.attentionSince = normalized.lastSeen || new Date().toISOString();
+    }
+
+    return normalized;
+  }
+
+  function migrateProgress(progressMap = {}) {
+    return Object.fromEntries(
+      Object.entries(progressMap).map(([id, progress]) => [id, normalizeProgress(progress)]),
+    );
+  }
+
   function loadState() {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -100,7 +141,7 @@
         ...defaultState(),
         ...stored,
         streak: { ...defaultState().streak, ...(stored.streak || {}) },
-        progress: stored.progress || {},
+        progress: migrateProgress(stored.progress || {}),
         activity: stored.activity || {},
       };
     } catch {
@@ -151,20 +192,14 @@
   }
 
   function getWordProgress(id) {
-    return state.progress[id] || {
-      seen: 0,
-      correct: 0,
-      wrong: 0,
-      streak: 0,
-      mastered: false,
-      nextReview: 0,
-      lastSeen: null,
-    };
+    return state.progress[id] || defaultWordProgress();
   }
 
   function wordStatus(word) {
     const progress = getWordProgress(word.id);
+    if (progress.needsAttention) return "attention";
     if (progress.mastered) return "mastered";
+    if (progress.relearnedAt) return "relearned";
     if (progress.seen > 0) return "learning";
     return "new";
   }
@@ -174,14 +209,18 @@
     let mastered = 0;
     let correct = 0;
     let wrong = 0;
+    let attention = 0;
+    let relearned = 0;
     Object.values(state.progress).forEach((progress) => {
       if (progress.seen > 0) studied += 1;
       if (progress.mastered) mastered += 1;
+      if (progress.needsAttention) attention += 1;
+      if (progress.relearnedAt && !progress.needsAttention) relearned += 1;
       correct += progress.correct || 0;
       wrong += progress.wrong || 0;
     });
     const answers = correct + wrong;
-    return { studied, mastered, correct, wrong, answers, accuracy: answers ? Math.round((correct / answers) * 100) : null };
+    return { studied, mastered, correct, wrong, attention, relearned, answers, accuracy: answers ? Math.round((correct / answers) * 100) : null };
   }
 
   function phaseStats(phase) {
@@ -190,10 +229,12 @@
     let mastered = 0;
     let correct = 0;
     let wrong = 0;
+    let attention = 0;
     words.forEach((word) => {
       const progress = getWordProgress(word.id);
       if (progress.seen > 0) studied += 1;
       if (progress.mastered) mastered += 1;
+      if (progress.needsAttention) attention += 1;
       correct += progress.correct || 0;
       wrong += progress.wrong || 0;
     });
@@ -203,16 +244,14 @@
       mastered,
       correct,
       wrong,
+      attention,
       accuracy: answers ? Math.round((correct / answers) * 100) : null,
       percent: Math.round((studied / WORDS_PER_PHASE) * 100),
     };
   }
 
   function reviewWordsCount() {
-    return WORDS.filter((word) => {
-      const progress = getWordProgress(word.id);
-      return progress.seen > 0 && !progress.mastered && (progress.wrong > 0 || progress.nextReview <= Date.now());
-    }).length;
+    return WORDS.filter((word) => getWordProgress(word.id).needsAttention).length;
   }
 
   function dailyDoneCount() {
@@ -263,30 +302,29 @@
     let candidates;
 
     if (currentMode === "review") {
-      const now = Date.now();
       candidates = WORDS
-        .filter((word) => {
-          const progress = getWordProgress(word.id);
-          return progress.seen > 0 && !progress.mastered && (progress.wrong > 0 || progress.nextReview <= now);
-        })
-        .sort((a, b) => getWordProgress(a.id).nextReview - getWordProgress(b.id).nextReview);
-
-      if (!candidates.length) {
-        candidates = phaseWords
-          .filter((word) => getWordProgress(word.id).seen > 0 && !getWordProgress(word.id).mastered)
-          .sort((a, b) => getWordProgress(a.id).correct - getWordProgress(b.id).correct);
-      }
+        .filter((word) => getWordProgress(word.id).needsAttention)
+        .sort((a, b) => {
+          const progressA = getWordProgress(a.id);
+          const progressB = getWordProgress(b.id);
+          return (progressB.wrong - progressA.wrong)
+            || String(progressA.attentionSince || "").localeCompare(String(progressB.attentionSince || ""));
+        });
     } else {
       const unseen = phaseWords.filter((word) => getWordProgress(word.id).seen === 0);
       const learning = phaseWords
-        .filter((word) => getWordProgress(word.id).seen > 0 && !getWordProgress(word.id).mastered)
+        .filter((word) => {
+          const progress = getWordProgress(word.id);
+          return progress.seen > 0 && !progress.mastered && !progress.needsAttention;
+        })
         .sort((a, b) => getWordProgress(a.id).lastSeen?.localeCompare(getWordProgress(b.id).lastSeen || "") || 0);
+      const attention = phaseWords.filter((word) => getWordProgress(word.id).needsAttention);
       const mastered = phaseWords.filter((word) => getWordProgress(word.id).mastered);
-      candidates = [...unseen, ...learning, ...mastered];
+      candidates = [...unseen, ...learning, ...attention, ...mastered];
     }
 
     session = candidates.slice(0, SESSION_SIZE);
-    if (!session.length) session = phaseWords.slice(0, SESSION_SIZE);
+    if (!session.length && currentMode === "new") session = phaseWords.slice(0, SESSION_SIZE);
     sessionIndex = 0;
     showCurrentWord();
   }
@@ -307,21 +345,29 @@
     elements.hintButton.textContent = "◌ Mostrar dica";
     elements.hintButton.hidden = false;
     elements.soundButton.hidden = true;
+    elements.emptyReviewButton.hidden = true;
+    elements.reviewTip.hidden = currentMode !== "review";
+    elements.quizCard.classList.toggle("is-review-mode", currentMode === "review");
     elements.feedback.textContent = "";
     elements.feedback.className = "answer-feedback";
-    elements.sessionCurrent.textContent = Math.min(sessionIndex + 1, session.length || 1);
-    elements.sessionTotal.textContent = session.length || SESSION_SIZE;
+    elements.sessionCurrent.textContent = session.length ? Math.min(sessionIndex + 1, session.length) : 0;
+    elements.sessionTotal.textContent = session.length;
 
     if (!word) {
-      elements.prompt.textContent = "Sessão concluída!";
-      elements.meaningContext.textContent = "Comece uma nova sequência para continuar praticando.";
+      elements.questionLabel.textContent = currentMode === "review" ? "Fila de atenção" : "Sessão concluída";
+      elements.prompt.textContent = currentMode === "review" ? "Tudo reaprendido por enquanto!" : "Sessão concluída!";
+      elements.meaningContext.textContent = currentMode === "review"
+        ? "Nenhuma palavra precisa de atenção. Quando você errar outra, ela aparecerá aqui."
+        : "Comece uma nova sequência para continuar praticando.";
       elements.meaningContext.hidden = false;
       elements.answerForm.hidden = true;
+      elements.hintButton.hidden = true;
+      elements.emptyReviewButton.hidden = currentMode !== "review";
       return;
     }
 
     const mainMeaning = word.pt[0] || "—";
-    elements.questionLabel.textContent = currentMode === "review" ? "Revisão inteligente" : "Traduza para o inglês";
+    elements.questionLabel.textContent = currentMode === "review" ? "Precisa de atenção" : "Traduza para o inglês";
     elements.prompt.innerHTML = `Como se diz <em>“${escapeHtml(mainMeaning)}”</em> em inglês?`;
     if (word.pt.length > 1) {
       elements.meaningContext.textContent = `Também pode significar: ${word.pt.slice(1, 4).join(" • ")}`;
@@ -354,7 +400,7 @@
     }
 
     const correct = given === normalizeAnswer(word.en);
-    recordAnswer(word, correct);
+    const result = recordAnswer(word, correct);
     answered = true;
     elements.answerInput.disabled = true;
     elements.answerInput.classList.add(correct ? "is-correct" : "is-wrong");
@@ -362,17 +408,25 @@
     elements.hintButton.hidden = true;
     elements.soundButton.hidden = false;
     elements.feedback.className = `answer-feedback ${correct ? "is-correct" : "is-wrong"}`;
-    elements.feedback.innerHTML = correct
-      ? `Muito bem! <strong>${escapeHtml(word.en)}</strong> é a resposta certa.${hintUsed ? " Você usou uma dica — tente lembrar sem ela na próxima revisão." : ""}`
-      : `A resposta esperada era <strong>${escapeHtml(word.en)}</strong>. Ela entrou na sua fila de revisão.`;
+    if (!correct) {
+      elements.feedback.innerHTML = `A resposta esperada era <strong>${escapeHtml(word.en)}</strong>. A palavra recebeu a tag “Precisa treinar” e continua na fila de atenção.`;
+    } else if (result.relearned) {
+      elements.feedback.innerHTML = `Reaprendida! <strong>${escapeHtml(word.en)}</strong> saiu da sua fila de atenção.`;
+    } else if (result.keptForAttention) {
+      elements.feedback.innerHTML = `Você acertou <strong>${escapeHtml(word.en)}</strong> com a dica. Para confirmar que aprendeu, ela continua na fila até um acerto sem dica.`;
+    } else {
+      elements.feedback.innerHTML = `Muito bem! <strong>${escapeHtml(word.en)}</strong> é a resposta certa.${hintUsed ? " Tente lembrar sem a dica na próxima vez." : ""}`;
+    }
     speak(word.en);
     renderOverview();
   }
 
   function recordAnswer(word, correct) {
     const progress = getWordProgress(word.id);
+    const wasAttention = progress.needsAttention;
     progress.seen += 1;
     progress.lastSeen = dateKey();
+    progress.lastResult = correct ? "correct" : "wrong";
     if (correct) {
       progress.correct += 1;
       progress.streak += 1;
@@ -381,18 +435,32 @@
       progress.nextReview = Date.now() + days * 86400000;
       const attempts = progress.correct + progress.wrong;
       progress.mastered = progress.correct >= 3 && progress.streak >= 2 && progress.correct / attempts >= 0.75;
+      if (wasAttention && !hintUsed) {
+        progress.needsAttention = false;
+        progress.attentionReason = null;
+        progress.attentionSince = null;
+        progress.relearnedAt = new Date().toISOString();
+      }
       state.xp += hintUsed ? 8 : 12;
     } else {
       progress.wrong += 1;
       progress.streak = 0;
       progress.mastered = false;
       progress.nextReview = Date.now() + 10 * 60 * 1000;
+      progress.needsAttention = true;
+      progress.attentionReason = "mistake";
+      progress.attentionSince = progress.attentionSince || new Date().toISOString();
+      progress.relearnedAt = null;
       state.xp += 2;
     }
     state.progress[word.id] = progress;
     updateStreak();
     addActivity(correct);
     saveState();
+    return {
+      relearned: correct && wasAttention && !hintUsed,
+      keptForAttention: correct && wasAttention && hintUsed,
+    };
   }
 
   function nextWord() {
@@ -440,6 +508,33 @@
 
   function setModeButtons() {
     $$(".mode-button").forEach((button) => button.classList.toggle("is-active", button.dataset.mode === currentMode));
+  }
+
+  function toggleAttention(wordId) {
+    const word = WORDS.find((item) => item.id === Number(wordId));
+    if (!word) return;
+    const progress = getWordProgress(word.id);
+
+    if (progress.needsAttention) {
+      progress.needsAttention = false;
+      progress.attentionReason = null;
+      progress.attentionSince = null;
+      showToast(`${word.en} foi retirada da fila de atenção.`);
+    } else {
+      progress.needsAttention = true;
+      progress.attentionReason = "manual";
+      progress.attentionSince = new Date().toISOString();
+      progress.relearnedAt = null;
+      progress.nextReview = Date.now();
+      showToast(`${word.en} foi marcada para treinar mais.`);
+    }
+
+    state.progress[word.id] = progress;
+    saveState();
+    renderOverview();
+    renderWordList();
+    renderStats();
+    if (currentMode === "review") buildSession();
   }
 
   function renderOverview() {
@@ -521,6 +616,7 @@
       ["✦", formatNumber(state.xp), "XP acumulado"],
       ["▱", formatNumber(allTotals.studied), "palavras estudadas"],
       ["★", formatNumber(allTotals.mastered), "palavras dominadas"],
+      ["!", formatNumber(allTotals.attention), "precisam de atenção"],
       ["◎", allTotals.accuracy === null ? "—" : `${allTotals.accuracy}%`, "precisão geral"],
     ];
     elements.statGrid.innerHTML = cards.map(([icon, value, label]) => `
@@ -550,7 +646,7 @@
       const stats = phaseStats(index + 1);
       return `
         <div class="performance-row">
-          <div><h3>Fase ${index + 1} · ${escapeHtml(phase.name)}</h3><small>${stats.mastered} dominadas</small></div>
+          <div><h3>Fase ${index + 1} · ${escapeHtml(phase.name)}</h3><small>${stats.mastered} dominadas · ${stats.attention} para treinar</small></div>
           <span class="progress-track"><i style="width:${stats.percent}%"></i></span>
           <span>${stats.studied}/300 · ${stats.accuracy === null ? "sem respostas" : `${stats.accuracy}% de precisão`}</span>
         </div>`;
@@ -575,9 +671,16 @@
     const pageCount = Math.max(1, Math.ceil(words.length / PAGE_SIZE));
     wordPage = Math.min(pageCount, Math.max(1, wordPage));
     const pageWords = words.slice((wordPage - 1) * PAGE_SIZE, wordPage * PAGE_SIZE);
-    const statusLabels = { new: "Não estudada", learning: "Aprendendo", mastered: "Dominada" };
+    const statusLabels = {
+      new: "Não estudada",
+      attention: "Precisa treinar",
+      relearned: "Reaprendida",
+      learning: "Aprendendo",
+      mastered: "Dominada",
+    };
     elements.wordTableBody.innerHTML = pageWords.length ? pageWords.map((word) => {
       const status = wordStatus(word);
+      const progress = getWordProgress(word.id);
       const phase = Math.ceil(word.id / WORDS_PER_PHASE);
       return `
         <tr>
@@ -586,7 +689,10 @@
           <td>${escapeHtml(word.pt.slice(0, 3).join(" · "))}</td>
           <td>${phase}</td>
           <td><span class="status-pill ${status}">${statusLabels[status]}</span></td>
-          <td><button class="sound-icon-button" type="button" data-speak="${escapeHtml(word.en)}" aria-label="Ouvir ${escapeHtml(word.en)}">◖</button></td>
+          <td class="word-actions">
+            <button class="sound-icon-button" type="button" data-speak="${escapeHtml(word.en)}" aria-label="Ouvir ${escapeHtml(word.en)}" title="Ouvir pronúncia">◖</button>
+            <button class="attention-action-button ${progress.needsAttention ? "is-active" : ""}" type="button" data-attention-word="${word.id}">${progress.needsAttention ? "Retirar" : "Treinar mais"}</button>
+          </td>
         </tr>`;
     }).join("") : `<tr><td colspan="6">Nenhuma palavra encontrada.</td></tr>`;
     elements.wordResultsLabel.textContent = `${formatNumber(words.length)} ${words.length === 1 ? "palavra" : "palavras"}`;
@@ -627,7 +733,7 @@
         ...defaultState(),
         ...imported,
         streak: { ...defaultState().streak, ...(imported.streak || {}) },
-        progress: imported.progress || {},
+        progress: migrateProgress(imported.progress || {}),
         activity: imported.activity || {},
       };
       saveState();
@@ -671,11 +777,15 @@
 
       const speakButton = event.target.closest("[data-speak]");
       if (speakButton) speak(speakButton.dataset.speak);
+
+      const attentionButton = event.target.closest("[data-attention-word]");
+      if (attentionButton) toggleAttention(attentionButton.dataset.attentionWord);
     });
 
     elements.answerForm.addEventListener("submit", handleAnswer);
     elements.hintButton.addEventListener("click", showHint);
     elements.soundButton.addEventListener("click", () => currentWord() && speak(currentWord().en));
+    elements.emptyReviewButton.addEventListener("click", () => setMode("new"));
 
     $("#edit-goal-button").addEventListener("click", () => {
       elements.goalInput.value = state.dailyGoal;
